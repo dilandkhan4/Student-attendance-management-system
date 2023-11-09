@@ -3,165 +3,203 @@
  * @package dompdf
  * @link    http://dompdf.github.com/
  * @author  Benj Carson <benjcarson@digitaljunkies.ca>
- * @author  Helmut Tischer <htischer@weihenstephan.org>
+ * @author  Brian Sweeney <eclecticgeek@gmail.com>
  * @author  Fabien Ménager <fabien.menager@gmail.com>
  * @license http://www.gnu.org/copyleft/lesser.html GNU Lesser General Public License
  */
-namespace Dompdf\Renderer;
+namespace Dompdf\FrameDecorator;
 
-use Dompdf\Adapter\CPDF;
-use Dompdf\FontMetrics;
+use Dompdf\Dompdf;
 use Dompdf\Frame;
+use Dompdf\Exception;
+use DOMText;
+use Dompdf\FontMetrics;
 
 /**
- * Renders text frames
+ * Decorates Frame objects for text layout
  *
+ * @access  private
  * @package dompdf
  */
-class Text extends AbstractRenderer
+class Text extends AbstractFrameDecorator
 {
-    /** Thickness of underline. Screen: 0.08, print: better less, e.g. 0.04 */
-    const DECO_THICKNESS = 0.02;
 
-    //Tweaking if $base and $descent are not accurate.
-    //Check method_exists( $this->_canvas, "get_cpdf" )
-    //- For cpdf these can and must stay 0, because font metrics are used directly.
-    //- For other renderers, if different values are wanted, separate the parameter sets.
-    //  But $size and $size-$height seem to be accurate enough
-
-    /** Relative to bottom of text, as fraction of height */
-    const UNDERLINE_OFFSET = 0.0;
-
-    /** Relative to top of text */
-    const OVERLINE_OFFSET = 0.0;
-
-    /** Relative to centre of text. */
-    const LINETHROUGH_OFFSET = 0.0;
-
-    /** How far to extend lines past either end, in pt */
-    const DECO_EXTENSION = 0.0;
+    // protected members
+    protected $_text_spacing;
 
     /**
-     * @param \Dompdf\FrameDecorator\Text $frame
+     * Text constructor.
+     * @param Frame $frame
+     * @param Dompdf $dompdf
+     * @throws Exception
      */
-    function render(Frame $frame)
+    function __construct(Frame $frame, Dompdf $dompdf)
     {
-        $text = $frame->get_text();
-        if (trim($text) === "") {
-            return;
+        if (!$frame->is_text_node()) {
+            throw new Exception("Text_Decorator can only be applied to #text nodes.");
         }
 
-        $style = $frame->get_style();
-        list($x, $y) = $frame->get_position();
-        $cb = $frame->get_containing_block();
+        parent::__construct($frame, $dompdf);
+        $this->_text_spacing = null;
+    }
 
-        if (($ml = $style->margin_left) === "auto" || $ml === "none") {
-            $ml = 0;
-        }
+    function reset()
+    {
+        parent::reset();
+        $this->_text_spacing = null;
+    }
 
-        if (($pl = $style->padding_left) === "auto" || $pl === "none") {
-            $pl = 0;
-        }
+    // Accessor methods
 
-        if (($bl = $style->border_left_width) === "auto" || $bl === "none") {
-            $bl = 0;
-        }
+    /**
+     * @return null
+     */
+    function get_text_spacing()
+    {
+        return $this->_text_spacing;
+    }
 
-        $x += (float)$style->length_in_pt(array($ml, $pl, $bl), $cb["w"]);
+    /**
+     * @return string
+     */
+    function get_text()
+    {
+        // FIXME: this should be in a child class (and is incorrect)
+//    if ( $this->_frame->get_style()->content !== "normal" ) {
+//      $this->_frame->get_node()->data = $this->_frame->get_style()->content;
+//      $this->_frame->get_style()->content = "normal";
+//    }
 
+//      Helpers::pre_r("---");
+//      $style = $this->_frame->get_style();
+//      var_dump($text = $this->_frame->get_node()->data);
+//      var_dump($asc = utf8_decode($text));
+//      for ($i = 0; $i < strlen($asc); $i++)
+//        Helpers::pre_r("$i: " . $asc[$i] . " - " . ord($asc[$i]));
+//      Helpers::pre_r("width: " . $this->_dompdf->getFontMetrics()->getTextWidth($text, $style->font_family, $style->font_size));
+
+        return $this->_frame->get_node()->data;
+    }
+
+    //........................................................................
+
+    /**
+     * Vertical margins & padding do not apply to text frames
+     *
+     * http://www.w3.org/TR/CSS21/visudet.html#inline-non-replaced:
+     *
+     * The vertical padding, border and margin of an inline, non-replaced box
+     * start at the top and bottom of the content area, not the
+     * 'line-height'. But only the 'line-height' is used to calculate the
+     * height of the line box.
+     *
+     * @return float|int
+     */
+    function get_margin_height()
+    {
+        // This function is called in add_frame_to_line() and is used to
+        // determine the line height, so we actually want to return the
+        // 'line-height' property, not the actual margin box
+        $style = $this->get_parent()->get_style();
         $font = $style->font_family;
-        $size = $frame_font_size = $style->font_size;
-        $word_spacing = $frame->get_text_spacing() + (float)$style->length_in_pt($style->word_spacing);
+        $size = $style->font_size;
+
+        /*
+        Helpers::pre_r('-----');
+        Helpers::pre_r($style->line_height);
+        Helpers::pre_r($style->font_size);
+        Helpers::pre_r($this->_dompdf->getFontMetrics()->getFontHeight($font, $size));
+        Helpers::pre_r(($style->line_height / $size) * $this->_dompdf->getFontMetrics()->getFontHeight($font, $size));
+        */
+
+        return ($style->line_height / ($size > 0 ? $size : 1)) * $this->_dompdf->getFontMetrics()->getFontHeight($font, $size);
+    }
+
+    /**
+     * @return array
+     */
+    function get_padding_box()
+    {
+        $pb = $this->_frame->get_padding_box();
+        $pb[3] = $pb["h"] = $this->_frame->get_style()->height;
+
+        return $pb;
+    }
+
+    /**
+     * @param $spacing
+     */
+    function set_text_spacing($spacing)
+    {
+        $style = $this->_frame->get_style();
+
+        $this->_text_spacing = $spacing;
         $char_spacing = (float)$style->length_in_pt($style->letter_spacing);
-        $width = $style->width;
 
-        /*$text = str_replace(
-          array("{PAGE_NUM}"),
-          array($this->_canvas->get_page_number()),
-          $text
-        );*/
+        // Re-adjust our width to account for the change in spacing
+        $style->width = $this->_dompdf->getFontMetrics()->getTextWidth($this->get_text(), $style->font_family, $style->font_size, $spacing, $char_spacing);
+    }
 
-        $this->_canvas->text($x, $y, $text,
-            $font, $size,
-            $style->color, $word_spacing, $char_spacing);
+    /**
+     *  Recalculate the text width
+     *
+     * @return float
+     */
+    function recalculate_width()
+    {
+        $style = $this->get_style();
+        $text = $this->get_text();
+        $size = $style->font_size;
+        $font = $style->font_family;
+        $word_spacing = (float)$style->length_in_pt($style->word_spacing);
+        $char_spacing = (float)$style->length_in_pt($style->letter_spacing);
 
-        $line = $frame->get_containing_line();
+        return $style->width = $this->_dompdf->getFontMetrics()->getTextWidth($text, $font, $size, $word_spacing, $char_spacing);
+    }
 
-        // FIXME Instead of using the tallest frame to position,
-        // the decoration, the text should be well placed
-        if (false && $line->tallest_frame) {
-            $base_frame = $line->tallest_frame;
-            $style = $base_frame->get_style();
-            $size = $style->font_size;
+    // Text manipulation methods
+
+    /**
+     * split the text in this frame at the offset specified.  The remaining
+     * text is added a sibling frame following this one and is returned.
+     *
+     * @param $offset
+     * @return Frame|null
+     */
+    function split_text($offset)
+    {
+        if ($offset == 0) {
+            return null;
         }
 
-        $line_thickness = $size * self::DECO_THICKNESS;
-        $underline_offset = $size * self::UNDERLINE_OFFSET;
-        $overline_offset = $size * self::OVERLINE_OFFSET;
-        $linethrough_offset = $size * self::LINETHROUGH_OFFSET;
-        $underline_position = -0.08;
+        $split = $this->_frame->get_node()->splitText($offset);
 
-        if ($this->_canvas instanceof CPDF) {
-            $cpdf_font = $this->_canvas->get_cpdf()->fonts[$style->font_family];
+        $deco = $this->copy($split);
 
-            if (isset($cpdf_font["UnderlinePosition"])) {
-                $underline_position = $cpdf_font["UnderlinePosition"] / 1000;
-            }
+        $p = $this->get_parent();
+        $p->insert_child_after($deco, $this, false);
 
-            if (isset($cpdf_font["UnderlineThickness"])) {
-                $line_thickness = $size * ($cpdf_font["UnderlineThickness"] / 1000);
-            }
+        if ($p instanceof Inline) {
+            $p->split($deco);
         }
 
-        $descent = $size * $underline_position;
-        $base = $size;
+        return $deco;
+    }
 
-        // Handle text decoration:
-        // http://www.w3.org/TR/CSS21/text.html#propdef-text-decoration
+    /**
+     * @param $offset
+     * @param $count
+     */
+    function delete_text($offset, $count)
+    {
+        $this->_frame->get_node()->deleteData($offset, $count);
+    }
 
-        // Draw all applicable text-decorations.  Start with the root and work our way down.
-        $p = $frame;
-        $stack = array();
-        while ($p = $p->get_parent()) {
-            $stack[] = $p;
-        }
-
-        while (isset($stack[0])) {
-            $f = array_pop($stack);
-
-            if (($text_deco = $f->get_style()->text_decoration) === "none") {
-                continue;
-            }
-
-            $deco_y = $y; //$line->y;
-            $color = $f->get_style()->color;
-
-            switch ($text_deco) {
-                default:
-                    continue;
-
-                case "underline":
-                    $deco_y += $base - $descent + $underline_offset + $line_thickness / 2;
-                    break;
-
-                case "overline":
-                    $deco_y += $overline_offset + $line_thickness / 2;
-                    break;
-
-                case "line-through":
-                    $deco_y += $base * 0.7 + $linethrough_offset;
-                    break;
-            }
-
-            $dx = 0;
-            $x1 = $x - self::DECO_EXTENSION;
-            $x2 = $x + $width + $dx + self::DECO_EXTENSION;
-            $this->_canvas->line($x1, $deco_y, $x2, $deco_y, $color, $line_thickness);
-        }
-
-        if ($this->_dompdf->getOptions()->getDebugLayout() && $this->_dompdf->getOptions()->getDebugLayoutLines()) {
-            $text_width = $this->_dompdf->getFontMetrics()->getTextWidth($text, $font, $frame_font_size);
-            $this->_debug_layout(array($x, $y, $text_width + ($line->wc - 1) * $word_spacing, $frame_font_size), "orange", array(0.5, 0.5));
-        }
+    /**
+     * @param $text
+     */
+    function set_text($text)
+    {
+        $this->_frame->get_node()->data = $text;
     }
 }

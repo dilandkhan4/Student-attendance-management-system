@@ -5,32 +5,50 @@
  * @author  Benj Carson <benjcarson@digitaljunkies.ca>
  * @license http://www.gnu.org/copyleft/lesser.html GNU Lesser General Public License
  */
+namespace Dompdf\FrameDecorator;
 
-namespace Dompdf\Positioner;
-
-use Dompdf\FrameDecorator\AbstractFrameDecorator;
+use Dompdf\Dompdf;
+use Dompdf\Frame;
+use Dompdf\FrameDecorator\Table as TableFrameDecorator;
 
 /**
- * Positions table rows
+ * Decorates Frames for table row layout
  *
  * @package dompdf
  */
-class TableRow extends AbstractPositioner
+class TableRow extends AbstractFrameDecorator
 {
+    /**
+     * TableRow constructor.
+     * @param Frame $frame
+     * @param Dompdf $dompdf
+     */
+    function __construct(Frame $frame, Dompdf $dompdf)
+    {
+        parent::__construct($frame, $dompdf);
+    }
+
+    //........................................................................
 
     /**
-     * @param AbstractFrameDecorator $frame
+     * Remove all non table-cell frames from this row and move them after
+     * the table.
      */
-    function position(AbstractFrameDecorator $frame)
+    function normalise()
     {
-        $cb = $frame->get_containing_block();
-        $p = $frame->get_prev_sibling();
+        // Find our table parent
+        $p = TableFrameDecorator::find_parent_table($this);
 
-        if ($p) {
-            $y = $p->get_position("y") + $p->get_margin_height();
-        } else {
-            $y = $cb["y"];
+        $erroneous_frames = array();
+        foreach ($this->get_children() as $child) {
+            $display = $child->get_style()->display;
+
+            if ($display !== "table-cell")
+                $erroneous_frames[] = $child;
         }
-        $frame->set_position($cb["x"], $y);
+
+        //  dump the extra nodes after the table.
+        foreach ($erroneous_frames as $frame)
+            $p->move_after($frame);
     }
 }
