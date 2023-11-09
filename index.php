@@ -24,7 +24,6 @@ include('header.php');
               <th>Student Name</th>
               <th>Roll Number</th>
               <th>Grade</th>
-              <th>Teacher</th>
               <th>Attendance Percentage</th>
               <th>Report</th>
             </tr>
@@ -41,8 +40,8 @@ include('header.php');
 </body>
 </html>
 
-<script type="text/javascript" src="../js/bootstrap-datepicker.js"></script>
-<link rel="stylesheet" href="../css/datepicker.css" />
+<script type="text/javascript" src="js/bootstrap-datepicker.js"></script>
+<link rel="stylesheet" href="css/datepicker.css" />
 
 <style>
     .datepicker
@@ -64,12 +63,6 @@ include('header.php');
       <!-- Modal body -->
       <div class="modal-body">
         <div class="form-group">
-          <select name="report_action" id="report_action" class="form-control">
-            <option value="pdf_report">PDF Report</option>
-            <option value="chart_report">Chart Report</option>
-          </select>
-        </div>
-        <div class="form-group">
           <div class="input-daterange">
             <input type="text" name="from_date" id="from_date" class="form-control" placeholder="From Date" readonly />
             <span id="error_from_date" class="text-danger"></span>
@@ -90,10 +83,11 @@ include('header.php');
   </div>
 </div>
 
+
 <script>
 $(document).ready(function(){
 	 
-   var dataTable = $('#student_table').DataTable({
+  var dataTable = $('#student_table').DataTable({
     "processing":true,
     "serverSide":true,
     "order":[],
@@ -102,27 +96,26 @@ $(document).ready(function(){
       type:"POST",
       data:{action:'index_fetch'}
     }
-   });
+  });
 
-   $('.input-daterange').datepicker({
+  $('.input-daterange').datepicker({
     todayBtn:"linked",
-    format:'yyyy-mm-dd',
+    format:"yyyy-mm-dd",
     autoclose:true,
     container: '#formModal modal-body'
-   });
+  });
 
-   $(document).on('click', '.report_button', function(){
-    var student_id = $(this).data('student_id');
+  $(document).on('click', '.report_button', function(){
+    var student_id = $(this).attr('id');
     $('#student_id').val(student_id);
     $('#formModal').modal('show');
-   });
+  });
 
-   $('#create_report').click(function(){
+  $('#create_report').click(function(){
     var student_id = $('#student_id').val();
     var from_date = $('#from_date').val();
     var to_date = $('#to_date').val();
     var error = 0;
-    var action = $('#report_action').val();
     if(from_date == '')
     {
       $('#error_from_date').text('From Date is Required');
@@ -134,7 +127,7 @@ $(document).ready(function(){
     }
     if(to_date == '')
     {
-      $('#error_to_date').text("To Date is Required");
+      $('#error_to_date').text('To Date is Required');
       error++;
     }
     else
@@ -147,17 +140,9 @@ $(document).ready(function(){
       $('#from_date').val('');
       $('#to_date').val('');
       $('#formModal').modal('hide');
-      if(action == 'pdf_report')
-      {
-        window.open("report.php?action=student_report&student_id="+student_id+"&from_date="+from_date+"&to_date="+to_date);
-      }
-      if(action == 'chart_report')
-      {
-        location.href = "chart.php?action=student_chart&student_id="+student_id+"&from_date="+from_date+"&to_date="+to_date;
-      }
+      window.open("report.php?action=student_report&student_id="+student_id+"&from_date="+from_date+"&to_date="+to_date);
     }
-
-   });
+  });
 
 });
 </script>
