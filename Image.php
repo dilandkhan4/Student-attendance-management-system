@@ -1,90 +1,62 @@
 <?php
 /**
- * @package dompdf
- * @link    http://dompdf.github.com/
- * @author  Benj Carson <benjcarson@digitaljunkies.ca>
- * @author  Fabien MÃ©nager <fabien.menager@gmail.com>
+ * @package php-svg-lib
+ * @link    http://github.com/PhenX/php-svg-lib
+ * @author  Fabien Ménager <fabien.menager@gmail.com>
  * @license http://www.gnu.org/copyleft/lesser.html GNU Lesser General Public License
  */
-namespace Dompdf\FrameDecorator;
 
-use Dompdf\Dompdf;
-use Dompdf\Frame;
-use Dompdf\FontMetrics;
-use Dompdf\Image\Cache;
+namespace Svg\Tag;
 
-/**
- * Decorates frames for image layout and rendering
- *
- * @package dompdf
- */
-class Image extends AbstractFrameDecorator
+class Image extends AbstractTag
 {
+    protected $x = 0;
+    protected $y = 0;
+    protected $width = 0;
+    protected $height = 0;
+    protected $href = null;
 
-    /**
-     * The path to the image file (note that remote images are
-     * downloaded locally to Options:tempDir).
-     *
-     * @var string
-     */
-    protected $_image_url;
-
-    /**
-     * The image's file error message
-     *
-     * @var string
-     */
-    protected $_image_msg;
-
-    /**
-     * Class constructor
-     *
-     * @param Frame $frame the frame to decorate
-     * @param DOMPDF $dompdf the document's dompdf object (required to resolve relative & remote urls)
-     */
-    function __construct(Frame $frame, Dompdf $dompdf)
+    protected function before($attributes)
     {
-        parent::__construct($frame, $dompdf);
-        $url = $frame->get_node()->getAttribute("src");
+        parent::before($attributes);
 
-        $debug_png = $dompdf->getOptions()->getDebugPng();
-        if ($debug_png) print '[__construct ' . $url . ']';
+        $surface = $this->document->getSurface();
+        $surface->save();
 
-        list($this->_image_url, /*$type*/, $this->_image_msg) = Cache::resolve_url(
-            $url,
-            $dompdf->getProtocol(),
-            $dompdf->getBaseHost(),
-            $dompdf->getBasePath(),
-            $dompdf
-        );
+        $this->applyTransform($attributes);
+    }
 
-        if (Cache::is_broken($this->_image_url) &&
-            $alt = $frame->get_node()->getAttribute("alt")
-        ) {
-            $style = $frame->get_style();
-            $style->width = (4 / 3) * $dompdf->getFontMetrics()->getTextWidth($alt, $style->font_family, $style->font_size, $style->word_spacing);
-            $style->height = $dompdf->getFontMetrics()->getFontHeight($style->font_family, $style->font_size);
+    public function start($attributes)
+    {
+        $document = $this->document;
+        $height = $this->document->getHeight();
+        $this->y = $height;
+
+        if (isset($attributes['x'])) {
+            $this->x = $attributes['x'];
         }
+        if (isset($attributes['y'])) {
+            $this->y = $height - $attributes['y'];
+        }
+
+        if (isset($attributes['width'])) {
+            $this->width = $attributes['width'];
+        }
+        if (isset($attributes['height'])) {
+            $this->height = $attributes['height'];
+        }
+
+        if (isset($attributes['xlink:href'])) {
+            $this->href = $attributes['xlink:href'];
+        }
+
+        $document->getSurface()->transform(1, 0, 0, -1, 0, $height);
+
+        $document->getSurface()->drawImage($this->href, $this->x, $this->y, $this->width, $this->height);
     }
 
-    /**
-     * Return the image's url
-     *
-     * @return string The url of this image
-     */
-    function get_image_url()
+    protected function after()
     {
-        return $this->_image_url;
+        $this->document->getSurface()->restore();
     }
-
-    /**
-     * Return the image's error message
-     *
-     * @return string The image's error message
-     */
-    function get_image_msg()
-    {
-        return $this->_image_msg;
-    }
-
-}
+} 
