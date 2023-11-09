@@ -6,86 +6,71 @@
  * @author  Helmut Tischer <htischer@weihenstephan.org>
  * @license http://www.gnu.org/copyleft/lesser.html GNU Lesser General Public License
  */
-namespace Dompdf\FrameDecorator;
 
-use Dompdf\Dompdf;
-use Dompdf\Frame;
+namespace Dompdf\Positioner;
+
+use Dompdf\FrameDecorator\AbstractFrameDecorator;
 
 /**
- * Decorates frames for list bullet rendering
+ * Positions list bullets
  *
  * @package dompdf
  */
-class ListBullet extends AbstractFrameDecorator
+class ListBullet extends AbstractPositioner
 {
 
-    const BULLET_PADDING = 1; // Distance from bullet to text in pt
-    // As fraction of font size (including descent). See also DECO_THICKNESS.
-    const BULLET_THICKNESS = 0.04; // Thickness of bullet outline. Screen: 0.08, print: better less, e.g. 0.04
-    const BULLET_DESCENT = 0.3; //descent of font below baseline. Todo: Guessed for now.
-    const BULLET_SIZE = 0.35; // bullet diameter. For now 0.5 of font_size without descent.
-
-    static $BULLET_TYPES = array("disc", "circle", "square");
-
     /**
-     * ListBullet constructor.
-     * @param Frame $frame
-     * @param Dompdf $dompdf
+     * @param AbstractFrameDecorator $frame
      */
-    function __construct(Frame $frame, Dompdf $dompdf)
+    function position(AbstractFrameDecorator $frame)
     {
-        parent::__construct($frame, $dompdf);
-    }
 
-    /**
-     * @return float|int
-     */
-    function get_margin_width()
-    {
-        $style = $this->_frame->get_style();
+        // Bullets & friends are positioned an absolute distance to the left of
+        // the content edge of their parent element
+        $cb = $frame->get_containing_block();
 
-        // Small hack to prevent extra indenting of list text on list_style_position === "inside"
-        // and on suppressed bullet
-        if ($style->list_style_position === "outside" ||
-            $style->list_style_type === "none"
-        ) {
-            return 0;
+        // Note: this differs from most frames in that we must position
+        // ourselves after determining our width
+        $x = $cb["x"] - $frame->get_width();
+
+        $p = $frame->find_block_parent();
+
+        $y = $p->get_current_line_box()->y;
+
+        // This is a bit of a hack...
+        $n = $frame->get_next_sibling();
+        if ($n) {
+            $style = $n->get_style();
+            $line_height = $style->length_in_pt($style->line_height, $style->get_font_size());
+            $offset = (float)$style->length_in_pt($line_height, $n->get_containing_block("h")) - $frame->get_height();
+            $y += $offset / 2;
         }
 
-        return $style->get_font_size() * self::BULLET_SIZE + 2 * self::BULLET_PADDING;
+        // Now the position is the left top of the block which should be marked with the bullet.
+        // We tried to find out the y of the start of the first text character within the block.
+        // But the top margin/padding does not fit, neither from this nor from the next sibling
+        // The "bit of a hack" above does not work also.
+
+        // Instead let's position the bullet vertically centered to the block which should be marked.
+        // But for get_next_sibling() the get_containing_block is all zero, and for find_block_parent()
+        // the get_containing_block is paper width and the entire list as height.
+
+        // if ($p) {
+        //   //$cb = $n->get_containing_block();
+        //   $cb = $p->get_containing_block();
+        //   $y += $cb["h"]/2;
+        // print 'cb:'.$cb["x"].':'.$cb["y"].':'.$cb["w"].':'.$cb["h"].':';
+        // }
+
+        // Todo:
+        // For now give up on the above. Use Guesswork with font y-pos in the middle of the line spacing
+
+        /*$style = $p->get_style();
+        $font_size = $style->get_font_size();
+        $line_height = (float)$style->length_in_pt($style->line_height, $font_size);
+        $y += ($line_height - $font_size) / 2;    */
+
+        //Position is x-end y-top of character position of the bullet.
+        $frame->set_position($x, $y);
     }
-
-    /**
-     * hits only on "inset" lists items, to increase height of box
-     *
-     * @return float|int
-     */
-    function get_margin_height()
-    {
-        $style = $this->_frame->get_style();
-
-        if ($style->list_style_type === "none") {
-            return 0;
-        }
-
-        return $style->get_font_size() * self::BULLET_SIZE + 2 * self::BULLET_PADDING;
-    }
-
-    /**
-     * @return float|int
-     */
-    function get_width()
-    {
-        return $this->get_margin_height();
-    }
-
-    /**
-     * @return float|int
-     */
-    function get_height()
-    {
-        return $this->get_margin_height();
-    }
-
-    //........................................................................
 }

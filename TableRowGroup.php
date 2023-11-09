@@ -5,66 +5,46 @@
  * @author  Benj Carson <benjcarson@digitaljunkies.ca>
  * @license http://www.gnu.org/copyleft/lesser.html GNU Lesser General Public License
  */
-namespace Dompdf\FrameDecorator;
+namespace Dompdf\Renderer;
 
-use Dompdf\Dompdf;
 use Dompdf\Frame;
 
 /**
- * Table row group decorator
- *
- * Overrides split() method for tbody, thead & tfoot elements
+ * Renders block frames
  *
  * @package dompdf
  */
-class TableRowGroup extends AbstractFrameDecorator
+class TableRowGroup extends Block
 {
 
     /**
-     * Class constructor
-     *
-     * @param Frame $frame   Frame to decorate
-     * @param Dompdf $dompdf Current dompdf instance
+     * @param Frame $frame
      */
-    function __construct(Frame $frame, Dompdf $dompdf)
+    function render(Frame $frame)
     {
-        parent::__construct($frame, $dompdf);
-    }
+        $style = $frame->get_style();
 
-    /**
-     * Override split() to remove all child rows and this element from the cellmap
-     *
-     * @param Frame $child
-     * @param bool $force_pagebreak
-     *
-     * @return void
-     */
-    function split(Frame $child = null, $force_pagebreak = false)
-    {
-        if (is_null($child)) {
-            parent::split();
-            return;
+        $this->_set_opacity($frame->get_opacity($style->opacity));
+
+        $this->_render_border($frame);
+        $this->_render_outline($frame);
+
+        if ($this->_dompdf->getOptions()->getDebugLayout() && $this->_dompdf->getOptions()->getDebugLayoutBlocks()) {
+            $this->_debug_layout($frame->get_border_box(), "red");
+            if ($this->_dompdf->getOptions()->getDebugLayoutPaddingBox()) {
+                $this->_debug_layout($frame->get_padding_box(), "red", array(0.5, 0.5));
+            }
         }
 
-        // Remove child & all subsequent rows from the cellmap
-        $cellmap = $this->get_parent()->get_cellmap();
-        $iter = $child;
-
-        while ($iter) {
-            $cellmap->remove_row($iter);
-            $iter = $iter->get_next_sibling();
+        if ($this->_dompdf->getOptions()->getDebugLayout() && $this->_dompdf->getOptions()->getDebugLayoutLines() && $frame->get_decorator()) {
+            foreach ($frame->get_decorator()->get_line_boxes() as $line) {
+                $frame->_debug_layout(array($line->x, $line->y, $line->w, $line->h), "orange");
+            }
         }
 
-        // If we are splitting at the first child remove the
-        // table-row-group from the cellmap as well
-        if ($child === $this->get_first_child()) {
-            $cellmap->remove_row_group($this);
-            parent::split();
-            return;
+        $id = $frame->get_node()->getAttribute("id");
+        if (strlen($id) > 0)  {
+            $this->_canvas->add_named_dest($id);
         }
-
-        $cellmap->update_row_group($this, $child->get_prev_sibling());
-        parent::split($child);
     }
 }
-
